@@ -1,7 +1,7 @@
 ## 📌 Autor
 
 <p align="center">
-  <img src="assets/ita.png" alt="ITA Logo" width="220">
+  <img src="ITA.png" alt="ITA Logo" width="220">
 </p>
 
 **WAGNER COMIN SONAGLIO**  
