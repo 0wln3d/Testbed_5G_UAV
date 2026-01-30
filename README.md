@@ -420,107 +420,17 @@ kubectl logs -n open5gs $(kubectl get pods -n open5gs -o name | grep amf | head 
 
 ## 04 – Deploy do UERANSIM gNB (GNB01)
 
-### ConfigMap do gNB
+Arquivos:
+- `config/ueransim-gcs-config.yaml` (ConfigMap: `ue.yaml.tpl`, `gcs`, `gcs.py`)
+- `config/ueransim-gcs-deploy.yaml` (Deployment)
+- `config/ueransim-gcs-svc.yaml` (Service headless)
+
+Deploy:
 
 ```bash
-cat > config/ueransim-gnb01-config.yaml << 'EOF'
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ueransim-gnb01-config
-  namespace: open5gs
-data:
-  gnb-base.yaml: |
-    mcc: "999"
-    mnc: "70"
-    nci: "0x10"
-    idLength: 32
-    tac: 1
-
-    amfConfigs:
-      - address: open5gs-amf-ngap.open5gs.svc.cluster.local
-        port: 38412
-
-    slices:
-      - sst: 1
-        sd: "0x111111"
-EOF
-```
-
-```bash
-kubectl apply -f config/ueransim-gnb01-config.yaml
-```
-
-### Deployment do gNB
-
-```bash
-cat > config/ueransim-gnb01-deploy.yaml << 'EOF'
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ueransim-gnb01
-  namespace: open5gs
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: ueransim-gnb01
-  template:
-    metadata:
-      labels:
-        app: ueransim-gnb01
-    spec:
-      containers:
-        - name: gnb
-          image: free5gc/ueransim:latest
-          env:
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
-          command: ["/bin/sh","-lc"]
-          args:
-            - |
-              cat /config/gnb-base.yaml > /tmp/gnb.yaml
-              echo "" >> /tmp/gnb.yaml
-              echo "linkIp: ${POD_IP}" >> /tmp/gnb.yaml
-              echo "ngapIp: ${POD_IP}" >> /tmp/gnb.yaml
-              echo "gtpIp: ${POD_IP}" >> /tmp/gnb.yaml
-              echo "ignoreStreamIds: true" >> /tmp/gnb.yaml
-
-              exec /ueransim/nr-gnb -c /tmp/gnb.yaml
-          volumeMounts:
-            - name: cfg
-              mountPath: /config
-      volumes:
-        - name: cfg
-          configMap:
-            name: ueransim-gnb01-config
-EOF
-```
-
-```bash
-kubectl apply -f config/ueransim-gnb01-deploy.yaml
-```
-
-### Service headless do gNB
-
-```bash
-cat > config/ueransim-gnb01-svc.yaml << 'EOF'
-apiVersion: v1
-kind: Service
-metadata:
-  name: ueransim-gnb01
-  namespace: open5gs
-spec:
-  clusterIP: None
-  selector:
-    app: ueransim-gnb01
-EOF
-```
-
-```bash
-kubectl apply -f config/ueransim-gnb01-svc.yaml
+kubectl apply -f config/ueransim-gcs-config.yaml
+kubectl apply -f config/ueransim-gcs-deploy.yaml
+kubectl apply -f config/ueransim-gcs-svc.yaml
 ```
 
 ### Logs úteis
@@ -765,6 +675,20 @@ kubectl apply -f config/ueransim-rogue-svc.yaml
 
 ## 09 – Testes
 
+### Comunicação MAVlink do UAV x GCS
+
+Entrar no bash do UAV e executar o app "uav":
+```bash
+kubectl exec -it -n open5gs deploy/ueransim-uav -- bash
+uav
+```
+Entrar no bash do GCS e executar o app "gcs":
+```bash
+kubectl exec -it -n open5gs deploy/ueransim-gcs -- bash
+gcs
+help
+```
+
 ### Log do AMF (registro)
 
 ```bash
@@ -833,5 +757,15 @@ Eles geram e fazem download dos arquivos de configuração de forma automática,
 > ```bash
 > chmod +x scripts/*.sh
 > ```
+
+## Observações
+
+### Utilização do Protocolo MAVlink 1.0 
+
+Por padrão os scripts estão utilizando o MAVlink 2.0. Caso opte pela versão 1.0, deve-se editar os arquivos "/tmp/uav.py" e "/tmp/gcs.py" dentro dos seus respectivos PODs e comentar as seguintes linhas:
+```bash
+import os
+os.environ['MAVLINK20'] = '1'
+```
 
 ---
