@@ -534,7 +534,15 @@ kubectl logs -n open5gs $(kubectl get pods -n open5gs -o name | grep amf | head 
 
 ## 05 – Limpar e Cadastrar Subscribers
 
-### Remover subscribers atuais
+> **Nota prática:** o uso de `sqn: Long(256)` evita erros do tipo  
+> `SQN out of range` em cenários de reset, falhas de attach ou instabilidade do lab.
+>
+> Em ambientes reais, o correto é manter o sincronismo de SQN.  
+> Aqui, trata-se de um *workaround* prático para experimentação.
+
+---
+
+#### 🔄 Remover subscribers atuais
 
 ```bash
 kubectl exec -n open5gs deployment/open5gs-mongodb -ti -- \
@@ -544,20 +552,156 @@ print("Subscribers removidos");
 '
 ```
 
-### Conferir remoção
+---
+
+#### 🔍 Conferir remoção
 
 ```bash
 kubectl exec -n open5gs deployment/open5gs-mongodb -ti -- \
 mongosh open5gs --eval 'db.subscribers.find().pretty()'
 ```
 
-### Inserir 3 subscribers (UAV / GCS / ROGUE)
+---
 
-> **Nota prática:** `sqn: Long(256)` evita `SQN out of range` em cenários de reset/instabilidade.
+#### ➕ Inserir novos subscribers (UAV / GCS / ROGUE)
 
-> **Importante:** o bloco completo de `insertMany([...])` deve estar no seu repositório **exatamente como no tutorial** (é grande).  
-> Se você quiser, posso também gerar este README já com o bloco inteiro incluído (sem encurtar nada).
+```bash
+kubectl exec -n open5gs deployment/open5gs-mongodb -ti -- \
+mongosh open5gs --eval '
+db.subscribers.insertMany([
+  {
+    schema_version: 1,
+    imsi: "999700000000001",
+    slice: [{
+      sst: 1,
+      sd: "111111",
+      default_indicator: true,
+      session: [{
+        name: "internet",
+        type: 3,
+        qos: {
+          index: 9,
+          arp: {
+            priority_level: 8,
+            pre_emption_capability: 1,
+            pre_emption_vulnerability: 2
+          }
+        },
+        ambr: {
+          downlink: { value: 1000000000, unit: 0 },
+          uplink:   { value: 1000000000, unit: 0 }
+        },
+        pcc_rule: []
+      }]
+    }],
+    security: {
+      k: "465B5CE8B199B49FAA5F0A2EE238A6BC",
+      opc: "E8ED289DEBA952E4283B54E88E6183CA",
+      amf: "8000",
+      sqn: Long(256)
+    },
+    ambr: {
+      downlink: { value: 1000000000, unit: 0 },
+      uplink:   { value: 1000000000, unit: 0 }
+    },
+    access_restriction_data: 32,
+    network_access_mode: 0,
+    subscriber_status: 0
+  },
 
+  {
+    schema_version: 1,
+    imsi: "999700000000002",
+    slice: [{
+      sst: 1,
+      sd: "111111",
+      default_indicator: true,
+      session: [{
+        name: "internet",
+        type: 3,
+        qos: {
+          index: 9,
+          arp: {
+            priority_level: 8,
+            pre_emption_capability: 1,
+            pre_emption_vulnerability: 2
+          }
+        },
+        ambr: {
+          downlink: { value: 1000000000, unit: 0 },
+          uplink:   { value: 1000000000, unit: 0 }
+        },
+        pcc_rule: []
+      }]
+    }],
+    security: {
+      k: "465B5CE8B199B49FAA5F0A2EE238A6BC",
+      opc: "E8ED289DEBA952E4283B54E88E6183CA",
+      amf: "8000",
+      sqn: Long(256)
+    },
+    ambr: {
+      downlink: { value: 1000000000, unit: 0 },
+      uplink:   { value: 1000000000, unit: 0 }
+    },
+    access_restriction_data: 32,
+    network_access_mode: 0,
+    subscriber_status: 0
+  },
+
+  {
+    schema_version: 1,
+    imsi: "999700000000003",
+    slice: [{
+      sst: 1,
+      sd: "111111",
+      default_indicator: true,
+      session: [{
+        name: "internet",
+        type: 3,
+        qos: {
+          index: 9,
+          arp: {
+            priority_level: 8,
+            pre_emption_capability: 1,
+            pre_emption_vulnerability: 2
+          }
+        },
+        ambr: {
+          downlink: { value: 1000000000, unit: 0 },
+          uplink:   { value: 1000000000, unit: 0 }
+        },
+        pcc_rule: []
+      }]
+    }],
+    security: {
+      k: "465B5CE8B199B49FAA5F0A2EE238A6BC",
+      opc: "E8ED289DEBA952E4283B54E88E6183CA",
+      amf: "8000",
+      sqn: Long(256)
+    },
+    ambr: {
+      downlink: { value: 1000000000, unit: 0 },
+      uplink:   { value: 1000000000, unit: 0 }
+    },
+    access_restriction_data: 32,
+    network_access_mode: 0,
+    subscriber_status: 0
+  }
+]);
+
+print("3 subscribers inseridos com sucesso");
+'
+```
+
+---
+
+#### ✅ Conferir inserção
+
+```bash
+kubectl exec -n open5gs deployment/open5gs-mongodb -ti -- \
+mongosh open5gs --eval 'db.subscribers.find().pretty()'
+```
 
 ---
 
