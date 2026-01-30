@@ -1,6 +1,7 @@
 ## 📌 Autor
 **Wagner Comin Sonaglio**  
 [![Email](https://img.shields.io/badge/email-wagner.sonaglio%40gmail.com-blue)](mailto:wagner.sonaglio@gmail.com)
+
 ITA – Pesquisa em segurança de redes móveis (5G/6G) e resiliência de C2 UAV
 
 # 5G UAV Testbed – Open5GS + UERANSIM + MAVLink
