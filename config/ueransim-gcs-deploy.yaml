@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ueransim-gcs
+  namespace: open5gs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ueransim-gcs
+  template:
+    metadata:
+      labels:
+        app: ueransim-gcs
+    spec:
+      containers:
+        - name: ue
+          image: free5gc/ueransim:latest
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["NET_ADMIN"]
+          env:
+            - name: GNB_FQDN
+              value: "ueransim-gnb01.open5gs.svc.cluster.local"
+          command: ["/bin/sh","-lc"]
+          args:
+            - |
+              set -e
+              echo "[GCS] Resolving gNB FQDN: $GNB_FQDN"
+              GNB_IP="$(getent hosts "$GNB_FQDN" | awk '{print $1; exit}')"
+              if [ -z "$GNB_IP" ]; then
+                echo "[GCS] ERROR: could not resolve $GNB_FQDN"
+                exit 1
+              fi
+              echo "[GCS] gNB IP resolved: $GNB_IP"
+              sed "s/__GNB_IP__/$GNB_IP/g" /config/ue.yaml.tpl > /tmp/ue.yaml
+              echo "=== ue.yaml final (GCS) ==="
+              cat /tmp/ue.yaml
+              echo "=========================="
+              apt-get update && \
+              apt-get install -y python3 python3-pip tcpdump nano iputils-ping python3-venv && \
+              python3 -m venv /opt/mavlink-venv && \
+              . /opt/mavlink-venv/bin/activate && \
+              pip install pymavlink
+              cp /config/gcs.py /tmp/gcs.py
+              cp /config/gcs /usr/local/bin/gcs
+              chmod +x /usr/local/bin/gcs
+              exec /ueransim/nr-ue -c /tmp/ue.yaml
+          volumeMounts:
+            - name: cfg
+              mountPath: /config
+            - name: devtun
+              mountPath: /dev/net/tun
+      volumes:
+        - name: cfg
+          configMap:
+            name: ueransim-gcs-config
+        - name: devtun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice

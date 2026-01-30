@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ueransim-rogue-config
+  namespace: open5gs
+data:
+  ue.yaml.tpl: |
+    supi: "imsi-999700000000003"
+    mcc: "999"
+    mnc: "70"
+
+    key: "465B5CE8B199B49FAA5F0A2EE238A6BC"
+    op:  "E8ED289DEBA952E4283B54E88E6183CA"
+    opType: "OPC"
+    amf: "8000"
+
+    gnbSearchList:
+      - "__GNB_IP__"
+
+    uacAic:
+      mps: false
+      mcs: false
+
+    uacAcc:
+      normalClass: 0
+      class11: false
+      class12: false
+      class13: false
+      class14: false
+      class15: false
+
+    sessions:
+      - type: "IPv4"
+        apn: "internet"
+        slice:
+          sst: 1
+          sd: "0x111111"
+
+    configured-nssai:
+      - sst: 1
+        sd: "0x111111"
+
+    default-nssai:
+      - sst: 1
+        sd: "0x111111"
+
+    integrity:
+      IA1: true
+      IA2: true
+      IA3: true
+
+    ciphering:
+      EA0: true
+      EA1: true
+      EA2: true
+      EA3: true
+
+    integrityMaxRate:
+      uplink: "full"
+      downlink: "full"

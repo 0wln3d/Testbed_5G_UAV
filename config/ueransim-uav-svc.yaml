@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ueransim-uav
+  namespace: open5gs
+spec:
+  clusterIP: None
+  selector:
+    app: ueransim-uav

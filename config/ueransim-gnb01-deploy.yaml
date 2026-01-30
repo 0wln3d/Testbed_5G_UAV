@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ueransim-gnb01
+  namespace: open5gs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ueransim-gnb01
+  template:
+    metadata:
+      labels:
+        app: ueransim-gnb01
+    spec:
+      containers:
+        - name: gnb
+          image: free5gc/ueransim:latest
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          command: ["/bin/sh","-lc"]
+          args:
+            - |
+              cat /config/gnb-base.yaml > /tmp/gnb.yaml
+              echo "linkIp: ${POD_IP}" >> /tmp/gnb.yaml
+              echo "ngapIp: ${POD_IP}" >> /tmp/gnb.yaml
+              echo "gtpIp: ${POD_IP}" >> /tmp/gnb.yaml
+              echo "ignoreStreamIds: true" >> /tmp/gnb.yaml
+              exec /ueransim/nr-gnb -c /tmp/gnb.yaml
+          volumeMounts:
+            - name: cfg
+              mountPath: /config
+      volumes:
+        - name: cfg
+          configMap:
+            name: ueransim-gnb01-config

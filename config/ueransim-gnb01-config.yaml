@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ueransim-gnb01-config
+  namespace: open5gs
+data:
+  gnb-base.yaml: |
+    mcc: "999"
+    mnc: "70"
+    nci: "0x10"
+    idLength: 32
+    tac: 1
+    amfConfigs:
+      - address: open5gs-amf-ngap.open5gs.svc.cluster.local
+        port: 38412
+    slices:
+      - sst: 1
+        sd: "0x111111"

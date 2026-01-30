@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ueransim-rogue
+  namespace: open5gs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ueransim-rogue
+  template:
+    metadata:
+      labels:
+        app: ueransim-rogue
+    spec:
+      containers:
+        - name: ue
+          image: free5gc/ueransim:latest
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["NET_ADMIN"]
+          env:
+            - name: GNB_FQDN
+              value: "ueransim-gnb01.open5gs.svc.cluster.local"
+          command: ["/bin/sh","-lc"]
+          args:
+            - |
+              set -e
+              echo "[ROGUE] Resolving gNB FQDN: $GNB_FQDN"
+              GNB_IP="$(getent hosts "$GNB_FQDN" | awk '{print $1; exit}')"
+              if [ -z "$GNB_IP" ]; then
+                echo "[ROGUE] ERROR: could not resolve $GNB_FQDN"
+                exit 1
+              fi
+              echo "[ROGUE] gNB IP resolved: $GNB_IP"
+              sed "s/__GNB_IP__/$GNB_IP/g" /config/ue.yaml.tpl > /tmp/ue.yaml
+              echo "=== ue.yaml final (ROGUE) ==="
+              cat /tmp/ue.yaml
+              echo "============================"
+              apt-get update && \
+              apt-get install -y python3 python3-pip python3-venv libsctp-dev lksctp-tools tcpdump nano hping3 iputils-ping && \
+              python3 -m venv /opt/rogue-venv && \
+              . /opt/rogue-venv/bin/activate && \
+              pip install scapy
+              exec /ueransim/nr-ue -c /tmp/ue.yaml
+          volumeMounts:
+            - name: cfg
+              mountPath: /config
+            - name: devtun
+              mountPath: /dev/net/tun
+      volumes:
+        - name: cfg
+          configMap:
+            name: ueransim-rogue-config
+        - name: devtun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice

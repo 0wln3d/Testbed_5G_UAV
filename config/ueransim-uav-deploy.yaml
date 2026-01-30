@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ueransim-uav
+  namespace: open5gs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ueransim-uav
+  template:
+    metadata:
+      labels:
+        app: ueransim-uav
+    spec:
+      containers:
+        - name: ue
+          image: free5gc/ueransim:latest
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["NET_ADMIN"]
+          env:
+            - name: GNB_FQDN
+              value: "ueransim-gnb01.open5gs.svc.cluster.local"
+          command: ["/bin/sh","-lc"]
+          args:
+            - |
+              set -e
+              echo "[UAV] Resolving gNB FQDN: $GNB_FQDN"
+              GNB_IP="$(getent hosts "$GNB_FQDN" | awk '{print $1; exit}')"
+              if [ -z "$GNB_IP" ]; then
+                echo "[UAV] ERROR: could not resolve $GNB_FQDN"
+                exit 1
+              fi
+              echo "[UAV] gNB IP resolved: $GNB_IP"
+              sed "s/__GNB_IP__/$GNB_IP/g" /config/ue.yaml.tpl > /tmp/ue.yaml
+              echo "=== ue.yaml final (UAV) ==="
+              cat /tmp/ue.yaml
+              echo "=========================="
+              echo "Instalando dependências..."  
+              apt-get update && \
+              apt-get install -y python3 python3-pip tcpdump nano iputils-ping python3-venv && \
+              python3 -m venv /opt/mavlink-venv && \
+              . /opt/mavlink-venv/bin/activate && \
+              pip install pymavlink
+              cp /config/uav.py /tmp/uav.py
+              cp /config/uav /usr/local/bin/uav
+              chmod +x /usr/local/bin/uav
+              exec /ueransim/nr-ue -c /tmp/ue.yaml
+          volumeMounts:
+            - name: cfg
+              mountPath: /config
+            - name: devtun
+              mountPath: /dev/net/tun
+      volumes:
+        - name: cfg
+          configMap:
+            name: ueransim-uav-config
+        - name: devtun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice

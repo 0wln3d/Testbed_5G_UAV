@@ -1,0 +1,4 @@
+upf:
+  containerSecurityContext:
+    runAsUser: 0
+    runAsGroup: 0

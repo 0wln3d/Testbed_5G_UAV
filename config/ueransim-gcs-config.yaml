@@ -1,0 +1,417 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ueransim-gcs-config
+  namespace: open5gs
+data:
+  ue.yaml.tpl: |
+    supi: "imsi-999700000000002"
+    mcc: "999"
+    mnc: "70"
+
+    key: "465B5CE8B199B49FAA5F0A2EE238A6BC"
+    op:  "E8ED289DEBA952E4283B54E88E6183CA"
+    opType: "OPC"
+    amf: "8000"
+
+    gnbSearchList:
+      - "__GNB_IP__"
+
+    uacAic:
+      mps: false
+      mcs: false
+
+    uacAcc:
+      normalClass: 0
+      class11: false
+      class12: false
+      class13: false
+      class14: false
+      class15: false
+
+    sessions:
+      - type: "IPv4"
+        apn: "internet"
+        slice:
+          sst: 1
+          sd: "0x111111"
+
+    configured-nssai:
+      - sst: 1
+        sd: "0x111111"
+
+    default-nssai:
+      - sst: 1
+        sd: "0x111111"
+
+    integrity:
+      IA1: true
+      IA2: true
+      IA3: true
+
+    ciphering:
+      EA0: true
+      EA1: true
+      EA2: true
+      EA3: true
+
+    integrityMaxRate:
+      uplink: "full"
+      downlink: "full"
+  gcs: |
+    #!/bin/bash
+
+    # Obtém o IP do GCS pela interface tun (uesimtun0)
+    IP_GCS=$(ip -o -4 addr show dev uesimtun0 | awk '{print $4}' | cut -d/ -f1)
+    echo "[GCS] Meu IP (uesimtun0): $IP_GCS"
+
+    # Solicita ao usuário o IP do UAV
+    read -p "[GCS] Digite o IP do UAV (tun): " IP_UAV
+
+    # Exibe para conferência
+    echo "[GCS] IP do UAV informado: $IP_UAV"
+
+    # Substitui placeholder no script Python
+    sed -i "s|DRONE_IP = '.*'|DRONE_IP = '$IP_UAV'|g" /tmp/gcs.py
+
+    # Executa o script Python
+    /opt/mavlink-venv/bin/python3 /tmp/gcs.py
+  gcs.py: |
+    import time
+    import threading
+    import socket
+    from collections import deque
+    from pymavlink import mavutil
+
+    DRONE_IP = '<IP_UAV>'
+    DRONE_LISTEN_PORT = 14550
+    CTRL_LISTEN_PORT  = 14551
+
+    SYS_ID  = 255
+    COMP_ID = 190
+
+    LINK_TIMEOUT_S = 30.0  # sem telemetria do UAV por 30s => desconectado
+    HB_PERIOD_S = 1.0      # heartbeat do GCS 1Hz (independente do input)
+
+    rx = mavutil.mavlink_connection(
+        f'udpin:0.0.0.0:{CTRL_LISTEN_PORT}',
+        source_system=SYS_ID,
+        source_component=COMP_ID
+    )
+    tx = mavutil.mavlink_connection(
+        f'udpout:{DRONE_IP}:{DRONE_LISTEN_PORT}',
+        source_system=SYS_ID,
+        source_component=COMP_ID
+    )
+
+    print(f'[GCS] enviando para {DRONE_IP}:{DRONE_LISTEN_PORT}, ouvindo em {CTRL_LISTEN_PORT}', flush=True)
+
+    # Estado compartilhado
+    lock = threading.Lock()
+    last_pos = None
+    last_ack = None
+    last_statustext = None
+    last_rx_any = time.time()
+
+    # fila para imprimir “em lote” antes do prompt (terminal limpo)
+    rx_events = deque(maxlen=200)
+
+    # Link state
+    link_up = True
+    stopped = False
+    running = True
+
+    def hb_send_once():
+        tx.mav.heartbeat_send(
+            mavutil.mavlink.MAV_TYPE_GCS,
+            mavutil.mavlink.MAV_AUTOPILOT_INVALID,
+            0, 0, 0
+        )
+
+    def pretty_pos(p):
+        lat = p['lat'] / 1e7
+        lon = p['lon'] / 1e7
+        alt_m = p['alt'] / 1000.0
+        rel_alt_m = p['relative_alt'] / 1000.0
+        return lat, lon, alt_m, rel_alt_m
+
+    def help_print():
+        print(
+            """
+    === COMANDOS (exemplos) ===
+    help
+    status
+
+    arm
+    disarm
+
+    mode guided
+    mode loiter
+    mode land
+
+    takeoff 10
+    takeoff 10m
+    land
+
+    setpos 20 10 15
+
+    pos     -> mostra última posição recebida (GLOBAL_POSITION_INT)
+    alt     -> mostra última altitude recebida (GLOBAL_POSITION_INT)
+
+    quit
+    """,
+            flush=True
+        )
+
+    def warn_lost():
+        print('[GCS] CONEXÃO PERDIDA (>=30s sem telemetria do UAV).', flush=True)
+
+    def ensure_link_or_warn():
+        with lock:
+            ok = (not stopped) and link_up
+        if not ok:
+            warn_lost()
+            print('[GCS] Comando NÃO enviado.', flush=True)
+            return False
+        return True
+
+    def send_arm(value: int):
+        if not ensure_link_or_warn():
+            return
+        tx.mav.command_long_send(
+            1, 0,
+            mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+            0,
+            float(value), 0, 0, 0, 0, 0, 0
+        )
+        print(f'[GCS] ARM_DISARM enviado param1={value}', flush=True)
+
+    def send_takeoff(alt_m: float):
+        if not ensure_link_or_warn():
+            return
+        tx.mav.command_long_send(
+            1, 0,
+            mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
+            0,
+            0, 0, 0, 0, 0, 0,
+            float(alt_m)  # param7
+        )
+        print(f'[GCS] TAKEOFF enviado alt={alt_m}m', flush=True)
+
+    def send_land():
+        if not ensure_link_or_warn():
+            return
+        tx.mav.command_long_send(
+            1, 0,
+            mavutil.mavlink.MAV_CMD_NAV_LAND,
+            0,
+            0, 0, 0, 0, 0, 0, 0, 0
+        )
+        print('[GCS] LAND enviado', flush=True)
+
+    def send_mode(custom_mode: int, name: str):
+        if not ensure_link_or_warn():
+            return
+        tx.mav.set_mode_send(
+            1,
+            mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            custom_mode
+        )
+        print(f'[GCS] MODE enviado {name.lower()} (custom_mode={custom_mode})', flush=True)
+
+    def send_setpos(north_m: float, east_m: float, alt_m: float):
+        if not ensure_link_or_warn():
+            return
+        z_down = -float(alt_m)
+        tx.mav.set_position_target_local_ned_send(
+            int(time.time() * 1000) & 0xFFFFFFFF,
+            1, 0,
+            mavutil.mavlink.MAV_FRAME_LOCAL_NED,
+            0b0000111111000111,
+            float(north_m), float(east_m), float(z_down),
+            0, 0, 0,
+            0, 0, 0,
+            0, 0
+        )
+        print(f'[GCS] SETPOS enviado N={north_m} E={east_m} ALT={alt_m}', flush=True)
+
+    def rx_worker():
+        global last_pos, last_ack, last_statustext, last_rx_any, running
+        while running:
+            try:
+                m = rx.recv_match(blocking=True, timeout=0.5)
+            except Exception:
+                continue
+            if not m:
+                continue
+            t = m.get_type()
+            d = m.to_dict()
+
+            with lock:
+                last_rx_any = time.time()
+                if t == 'GLOBAL_POSITION_INT':
+                    last_pos = d
+                elif t == 'COMMAND_ACK':
+                    last_ack = d
+                    rx_events.append(('COMMAND_ACK', d))
+                elif t == 'STATUSTEXT':
+                    last_statustext = d
+                    rx_events.append(('STATUSTEXT', d))
+                # HEARTBEAT ignorado (não poluir)
+
+    def hb_worker():
+        global running
+        while running:
+            # heartbeat continua existindo mesmo se você não digitar nada
+            with lock:
+                ok = (not stopped) and link_up
+            if ok:
+                try:
+                    hb_send_once()
+                except Exception:
+                    pass
+            time.sleep(HB_PERIOD_S)
+
+    # threads
+    t_rx = threading.Thread(target=rx_worker, daemon=True)
+    t_hb = threading.Thread(target=hb_worker, daemon=True)
+    t_rx.start()
+    t_hb.start()
+
+    # heartbeats iniciais (só “cosmético”)
+    for i in range(3):
+        hb_send_once()
+        print(f'[GCS] heartbeat inicial {i+1}', flush=True)
+        time.sleep(0.5)
+
+    print('\n[GCS] Terminal interativo pronto (digite help)\n', flush=True)
+
+    def flush_rx_events():
+        # imprime eventos acumulados ANTES do prompt, mantendo terminal limpo
+        printed = 0
+        while True:
+            with lock:
+                if not rx_events:
+                    break
+                typ, payload = rx_events.popleft()
+            print(f"\n[GCS] rx: {typ} | {payload}", flush=True)
+            printed += 1
+            if printed >= 30:
+                break
+
+    try:
+        while True:
+            # 1) atualiza timeout de link (independente de input)
+            now = time.time()
+            with lock:
+                if link_up and (now - last_rx_any) > LINK_TIMEOUT_S:
+                    link_up = False
+                    stopped = True
+
+            # 2) imprime o aviso uma vez (terminal limpo)
+            with lock:
+                became_down = stopped and (not link_up)
+            if became_down:
+                # só loga uma vez, então zera eventos repetidos
+                print('\n[GCS] CONEXÃO PERDIDA (>=30s sem telemetria). Parando TX (sem reconectar).', flush=True)
+
+            # 3) imprime RX pendente antes do prompt
+            flush_rx_events()
+
+            cmdline = input('[GCS] Comando> ').strip()
+            if not cmdline:
+                continue
+
+            parts = cmdline.split()
+            cmd = parts[0].lower()
+
+            if cmd in ('help', '?'):
+                help_print()
+                continue
+
+            if cmd in ('quit', 'exit'):
+                print('[GCS] saindo...', flush=True)
+                break
+
+            if cmd == 'status':
+                with lock:
+                    st = last_statustext
+                    ak = last_ack
+                    lp = last_pos
+                    down = stopped or (not link_up)
+                if down:
+                    warn_lost()
+
+                print('[GCS] --- STATUS ---', flush=True)
+                print(f"[GCS] last STATUSTEXT: {st if st else '(nenhum)'}", flush=True)
+                print(f"[GCS] last COMMAND_ACK: {ak if ak else '(nenhum)'}", flush=True)
+                if lp:
+                    lat, lon, alt_m, rel_alt_m = pretty_pos(lp)
+                    print(f'[GCS] last POS: lat={lat:.7f} lon={lon:.7f} rel_alt={rel_alt_m:.1f}m', flush=True)
+                else:
+                    print('[GCS] last POS: (nenhuma)', flush=True)
+                continue
+
+            if cmd == 'arm':
+                send_arm(1); continue
+            if cmd == 'disarm':
+                send_arm(0); continue
+
+            if cmd == 'mode' and len(parts) == 2:
+                name = parts[1].lower()
+                if name == 'guided':
+                    send_mode(4, 'GUIDED')
+                elif name == 'loiter':
+                    send_mode(5, 'LOITER')
+                elif name == 'land':
+                    send_mode(9, 'LAND')
+                else:
+                    print('[GCS] modos: guided | loiter | land', flush=True)
+                continue
+
+            if cmd == 'takeoff':
+                if len(parts) != 2:
+                    print('[GCS] uso: takeoff <alt_m>', flush=True); continue
+                raw = parts[1].lower().replace('m', '')
+                try:
+                    send_takeoff(float(raw))
+                except ValueError:
+                    print('[GCS] uso: takeoff <alt_m>  (ex: takeoff 10 | takeoff 10m)', flush=True)
+                continue
+
+            if cmd == 'land':
+                send_land(); continue
+
+            if cmd == 'setpos':
+                if len(parts) != 4:
+                    print('[GCS] uso: setpos <north_m> <east_m> <alt_m>', flush=True); continue
+                try:
+                    send_setpos(float(parts[1]), float(parts[2]), float(parts[3]))
+                except ValueError:
+                    print('[GCS] uso: setpos <north_m> <east_m> <alt_m>', flush=True)
+                continue
+
+            if cmd == 'pos':
+                with lock:
+                    lp = last_pos
+                if not lp:
+                    print('[GCS] ainda não recebi GLOBAL_POSITION_INT', flush=True)
+                else:
+                    lat, lon, alt_m, rel_alt_m = pretty_pos(lp)
+                    print(f'[GCS] POS lat={lat:.7f} lon={lon:.7f} alt={alt_m:.1f}m rel_alt={rel_alt_m:.1f}m', flush=True)
+                continue
+
+            if cmd == 'alt':
+                with lock:
+                    lp = last_pos
+                if not lp:
+                    print('[GCS] ainda não recebi GLOBAL_POSITION_INT', flush=True)
+                else:
+                    lat, lon, alt_m, rel_alt_m = pretty_pos(lp)
+                    print(f'[GCS] ALT rel_alt={rel_alt_m:.1f}m (alt={alt_m:.1f}m)', flush=True)
+                continue
+
+            print('[GCS] comando desconhecido. digite: help', flush=True)
+
+    finally:
+        running = False
