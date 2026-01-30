@@ -1,14 +1,20 @@
 ## 📌 Autor
-**Wagner Comin Sonaglio**  
-[![Email](https://img.shields.io/badge/email-wagner.sonaglio%40gmail.com-blue)](mailto:wagner.sonaglio@gmail.com)
 
-ITA – Pesquisa em segurança de redes móveis (5G/6G) e resiliência de C2 UAV
+**WAGNER COMIN SONAGLIO**  
+Aluno de **Mestrado** – PPGAO / PG-EEC  
+Instituto Tecnológico de Aeronáutica (ITA)  
+
+Pesquisa em **segurança de redes móveis (5G / Open RAN)** e **impacto na resiliência do canal de Comando e Controle (C2) de UAVs**.
+
+**Orientador:** Dr. Lourenço Alves Pereira Júnior  
+
+[![Email](https://img.shields.io/badge/email-wagner.sonaglio%40gmail.com-blue)](mailto:wagner.sonaglio@gmail.com)
 
 # 5G UAV Testbed – Open5GS + UERANSIM + MAVLink
 
 Este repositório contém um **testbed completo de rede 5G Standalone (SA)** usando **Open5GS** como core, **UERANSIM** para emulação de gNB e UEs, e **MAVLink** para simular comunicação **UAV ↔ GCS** sobre 5G.
 
-O ambiente foi pensado para **experimentos acadêmicos**, **pesquisa em cibersegurança**, **resiliência do canal C2**, e **testes de falhas/ataques** (ex.: DoS, perda de link, reset do gNB).
+O ambiente foi pensado para **experimentos acadêmicos**, **pesquisa em cibersegurança**, **resiliência do canal C2**, e **testes de falhas/ataques** (ex.: DoS, perda de link, injeção de C2, reset do gNB, entre outros).
 
 ---
 
@@ -19,20 +25,199 @@ O ambiente foi pensado para **experimentos acadêmicos**, **pesquisa em ciberseg
 - **UERANSIM gNB** – Estação rádio simulada
 - **UERANSIM UE (UAV)** – Drone (telemetria + failsafe RTL)
 - **UERANSIM UE (GCS)** – Ground Control Station (terminal interativo)
-- **UERANSIM UE (ROGUE)** – UE atacante (Scapy/hping3 para testes)
+- **UERANSIM UE (ROGUE)** – UE atacante (ferramentas de pentest)
 - **Kubernetes (kind)** – Orquestração local
 - **Docker** – Runtime de containers
 
-**Fluxo lógico (visão simplificada)**
+**Fluxo lógico da arquitetura**
 
 ```text
-UAV (UE1)  <----5G---->  gNB  <----NGAP/SBA---->  Open5GS Core
-   ↑                                                |
-   |----------------- MAVLink (UDP) ----------------|
-   ↓
-GCS (UE2)
+================================================================================
+🛰️ TESTBED 5G + UAV/GCS + ROGUE (Open5GS + UERANSIM)
+================================================================================
 
-ROGUE (UE3) compartilha o mesmo core e UPF
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          KUBERNETES CLUSTER                                  │
+│                          Namespace: open5gs                                  │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────┐
+  │           UERANSIM gNB          │
+  │   (RAN / Access - gNB Pod)      │
+  │                                 │
+  │  - NGAP  → AMF (N2)             │
+  │  - GTP-U → UPF (N3)             │
+  │  - Rádio lógico (sem camada PHY)│
+  └───────────────┬─────────────────┘
+                  │
+                  │  (RAN Access: N2/N3)
+                  │
+   ┌──────────────┴────────────────────────────────────────────────────────────┐
+   │                          OPEN5GS CORE (5GC)                               │
+   │                    (Control Plane + User Plane)                           │
+   └───────────────────────────────────────────────────────────────────────────┘
+
+   ┌───────────────────────────────────────────────────────────────────────────┐
+   │ CONTROL PLANE (SBA + NGAP)                                                │
+   │                                                                           │
+   │  N2 / NGAP                                                                │
+   │   ┌──────────────┐                                                        │
+   │   │     AMF      │  ◄─────── gNB (NGAP / N2)                              │
+   │   │ open5gs-amf  │                                                        │
+   │   └──────┬───────┘                                                        │
+   │          │                                                                │
+   │          │  SBI / SBA (HTTP/2 + service-based interfaces)                 │
+   │          │              (com SCP no meio)                                 │
+   │          │                                                                │
+   │   ┌──────▼────────────────────────────────────────────────────────────┐   │
+   │   │                    SCP (Service Communication Proxy)              │   │
+   │   │                      open5gs-scp                                  │   │
+   │   └──────┬────────────────────────────────────────────────────────────┘   │
+   │          │                                                                │
+   │          │  Serviços registram/descobrem via NRF e falam via SCP          │
+   │          │                                                                │
+   │  ┌───────▼───────┐        ┌──────────────┐        ┌──────────────┐        │
+   │  │      NRF      │        │     AUSF     │        │     UDM      │        │
+   │  │ open5gs-nrf   │        │ open5gs-ausf │        │ open5gs-udm  │        │
+   │  └───────┬───────┘        └───────┬──────┘        └───────┬──────┘        │
+   │          │                        │                       │               │
+   │          │                        │                       │               │
+   │  ┌───────▼───────┐        ┌───────▼───────┐        ┌──────▼───────┐       │
+   │  │      SMF      │        │      PCF      │        │      UDR     │       │
+   │  │ open5gs-smf   │        │ open5gs-pcf   │        │ open5gs-udr  │       │
+   │  └───────┬───────┘        └───────────────┘        └──────┬───────┘       │
+   │          │                                                │               │
+   │          │ N4                                             │               │
+   │          │                                                │               │
+   │  ┌───────▼───────┐                                 ┌──────▼──────────┐    │
+   │  │      UPF      │                                 │    MongoDB      │    │
+   │  │ open5gs-upf   │                                 │ open5gs-mongodb │    │
+   │  └───────────────┘                                 └─────────────────┘    │
+   │                                                                           │
+   │  Serviços adicionais presentes no core:                                   │
+   │   - BSF   (open5gs-bsf)   → binding / seleção de PCF em alguns fluxos     │
+   │   - NSSF  (open5gs-nssf)  → seleção de slice (NSSAI)                      │
+   │   - SEPP  (open5gs-sepp)  → fronteira/segurança inter-PLMN (roaming)      │
+   │                                                                           │
+   │  Operação / suporte no testbed:                                           │
+   │   - open5gs-webui     → UI de gestão                                      │
+   │   - open5gs-populate  → popula assinantes/config no DB                    │
+   └───────────────────────────────────────────────────────────────────────────┘
+
+
+   ┌───────────────────────────────────────────────────────────────────────────┐
+   │ USER PLANE                                                                │
+   │                                                                           │
+   │                         N3 (GTP-U)                                        │
+   │        gNB ───────────────────────────────────────► UPF                   │
+   │                                                   │                       │
+   │                                                   │  - Encap/Decap GTP-U  │
+   │                                                   │  - NAT/Forwarding     │
+   │                                                   │  - PDR/FAR/QER rules  │
+   │                                                   │                       │
+   │                              N6 (IP)              │                       │
+   │                    UE traffic (IP/UDP/TCP/ICMP) ──┘                       │
+   └───────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+📌 UEs (UERANSIM) e suas interfaces de dados
+================================================================================
+
+  ┌───────────────────────────────┐
+  │ UE1: UAV (drone)              │
+  │ Pod: ueransim-uav             │
+  │ Interface de dados: uesimtun0 │
+  │ IP (ex): 10.45.0.X            │
+  │                               │
+  │ App: uav.py (pymavlink)       │
+  │  - RX: UDP 14550              │
+  │  - TX: UDP 14551              │
+  └───────────────┬───────────────┘
+                  │
+                  │   Tráfego IP (N6) via UPF
+                  │   (túnel uesimtun0 do UE → GTP-U → UPF → UE destino)
+                  │
+  ┌───────────────▼───────────────┐
+  │ UE2: GCS (controlador)        │
+  │ Pod: ueransim-gcs             │
+  │ Interface de dados: uesimtun0 │
+  │ IP (ex): 10.45.0.X            │
+  │                               │
+  │ App: gcs.py (pymavlink)       │
+  │  - TX: UDP 14550 (para UAV)   │
+  │  - RX: UDP 14551 (do UAV)     │
+  │  - Terminal interativo        │
+  └───────────────────────────────┘
+
+
+================================================================================
+🔁 Fluxo MAVLink (plano de usuário / UDP)
+================================================================================
+
+  [GCS (UE2)]                             [UPF/N6]                         [UAV (UE1)]
+      |                                      |                                 |
+      | UDP → 10.45.0.3:14550 (command_long) |                                 |
+      |------------------------------------->|-------------------------------->|
+      |                                      |                                 |
+      | UDP ← 10.45.0.4:14551 (heartbeat/telemetry/statustext)                 |
+      |<-------------------------------------|<--------------------------------|
+      |                                      |                                 |
+
+  Observação:
+  - Isso é tráfego de USER PLANE (dados), não passa no AMF/SMF como “pacote”.
+  - AMF/SMF configuram a sessão; quem encaminha IP/UDP é o UPF.
+
+
+================================================================================
+🧨 UE3: ROGUE (atacante) — Vetores e Impactos (compartilha o mesmo Core e UPF)
+================================================================================
+
+  ┌───────────────────────────────┐
+  │ UE3: ROGUE (atacante)         │
+  │ Pod: ueransim-rogue           │
+  │ Interface: uesimtun0          │
+  │ IP (ex): 10.45.0.X            │
+  │                               │
+  │ Capacidades no testbed:       │
+  │  - DoS Volumétrico            │
+  │  - Injeção NAS/SCTP           │
+  │  - Spoofing de IMSI           │
+  │  - Storm de Sinalização       │
+  │  - Injeção de Comandos C2     │
+  │  - Interceptação Telemetria   │
+  └───────────────┬───────────────┘
+                  │
+                  │  Mesmo UPF / mesmo “domínio IP” dos UEs
+                  │  → compartilha recursos de user-plane
+                  │
+  ┌───────────────▼───────────────┐
+  │ Impacto típico:               │
+  │  - Saturação CPU do UPF (100%)│
+  │  - Colapso do AMF (Livelock)  │
+  │  - Desconexão forçada do GCS  │
+  │  - Latência/Jitter no Mavlink │
+  │  - Acionamento Failsafe (RTL) │
+  │  - Vazamento de GPS/Vídeo     │
+  │  - Sequestro de UAV (Hijack)  │
+  └───────────────────────────────┘
+
+
+================================================================================
+🧩 Resumo por camadas
+================================================================================
+
+  CAMADA 5G (Controle / Sessão)
+  - UE (UAV/GCS/ROGUE) fazem registro e sessão via gNB → AMF/SMF → UPF
+  - Aqui estão autenticação, criação de PDU Session, regras do UPF etc.
+
+  CAMADA IP (User Plane)
+  - Depois da sessão pronta, tráfego vira IP normal (UDP/TCP/ICMP)
+  - MAVLink roda como UDP em cima do IP entre IP's' 10.45.0.X
+
+  CAMADA APLICAÇÃO (MAVLink - exemplo)
+  - GCS envia COMMAND_LONG / SET_MODE / SET_POSITION_TARGET_LOCAL_NED
+  - UAV responde com HEARTBEAT / GLOBAL_POSITION_INT / STATUSTEXT
 ```
 
 ---
@@ -45,6 +230,10 @@ ROGUE (UE3) compartilha o mesmo core e UPF
 ├── scripts/
 │   ├── Iniciar_Testbed.sh      # Inicializa cluster, core, gNB e UEs
 │   └── Parar-Testbed.sh        # Para e faz limpeza total
+|
+├── scripts_MAVlink/
+│   ├── uav.py                  # Emulador do UAV
+│   └── gcs.py                  # Emulador do GCS
 │
 ├── config/
 │   ├── ngc-values.yaml                   # Valores base do Open5GS
