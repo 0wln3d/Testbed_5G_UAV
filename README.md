@@ -31,7 +31,7 @@ O ambiente foi pensado para **experimentos acadêmicos**, **pesquisa em ciberseg
 - **UERANSIM UE (GCS)** – Ground Control Station (terminal interativo)
 - **UERANSIM UE (ROGUE)** – UE atacante (ferramentas de pentest)
 - **Kubernetes (kind)** – Orquestração local
-- **Docker** – Runtime de containers
+- **Docker** – Runtime de containers - Kind
 
 **Fluxo lógico da arquitetura**
 
@@ -233,15 +233,15 @@ O ambiente foi pensado para **experimentos acadêmicos**, **pesquisa em ciberseg
 ├── README.md
 ├── scripts/
 │   ├── Iniciar_Testbed.sh      # Inicializa cluster, core, gNB e UEs
-│   └── Parar-Testbed.sh        # Para e faz limpeza total
+│   └── Parar-Testbed.sh        # Para cluster e faz limpeza total
 |
 ├── scripts_MAVlink/
-│   ├── uav.py                  # Emulador do UAV
-│   └── gcs.py                  # Emulador do GCS
+│   ├── uav.py                  # Simulador do UAV
+│   └── gcs.py                  # Simulador do GCS
 │
 ├── config/
 │   ├── ngc-values.yaml                   # Valores base do Open5GS
-│   ├── open5gs-override.yaml             # UPF como root (tcpdump)
+│   ├── open5gs-override.yaml             # UPF como root (possibilita tcpdump)
 │   ├── ueransim-gnb01-config.yaml
 │   ├── ueransim-gnb01-deploy.yaml
 │   ├── ueransim-gnb01-svc.yaml
@@ -558,6 +558,7 @@ mongosh open5gs --eval 'db.subscribers.find().pretty()'
 > **Importante:** o bloco completo de `insertMany([...])` deve estar no seu repositório **exatamente como no tutorial** (é grande).  
 > Se você quiser, posso também gerar este README já com o bloco inteiro incluído (sem encurtar nada).
 
+
 ---
 
 ## 06 – Deploy do UE1 (UAV) – UERANSIM-UAV
@@ -648,10 +649,11 @@ kubectl exec -n open5gs deploy/ueransim-rogue -- ping -I uesimtun0 -c 4 8.8.8.8
 kubectl exec -n open5gs deploy/open5gs-upf -ti -- bash -lc 'tcpdump -ni ogstun icmp'
 ```
 
-### Deletar / desligar gNB (validar dependência do túnel)
+### Desligar gNB ou UPF (validar dependência do túnel GTP-U)
 
 ```bash
 kubectl scale deployment ueransim-gnb01 -n open5gs --replicas=0
+kubectl scale deployment ueransim-upf -n open5gs --replicas=0
 ```
 
 ---
@@ -673,12 +675,15 @@ docker system prune -af
 
 ## ▶️ Uso via scripts
 
-Se você estiver usando os scripts em `scripts/`, a ideia é:
+Se você estiver usando os scripts em `scripts/`, o comando é:
 
 ```bash
 ./scripts/Iniciar-Testbed.sh
 ./scripts/Parar-Testbed.sh
 ```
+
+Os scripts funcionam após a instalação das dependências. 
+Eles geram e fazem download dos arquivos de configuração de forma automática, sem necessidade de baixar os arquivos em "config" e "charts".
 
 > Ajuste as permissões caso necessário:
 > ```bash
