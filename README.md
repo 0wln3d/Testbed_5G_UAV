@@ -421,16 +421,16 @@ kubectl logs -n open5gs $(kubectl get pods -n open5gs -o name | grep amf | head 
 ## 04 – Deploy do UERANSIM gNB (GNB01)
 
 Arquivos:
-- `config/ueransim-gcs-config.yaml` (ConfigMap: `ue.yaml.tpl`, `gcs`, `gcs.py`)
-- `config/ueransim-gcs-deploy.yaml` (Deployment)
-- `config/ueransim-gcs-svc.yaml` (Service headless)
+- `config/ueransim-gnb01-deploy.yaml` (ConfigMap)
+- `config/ueransim-gnb01-deploy.yaml` (Deployment)
+- `config/ueransim-gnb01-svc.yaml` (Service headless)
 
 Deploy:
 
 ```bash
-kubectl apply -f config/ueransim-gcs-config.yaml
-kubectl apply -f config/ueransim-gcs-deploy.yaml
-kubectl apply -f config/ueransim-gcs-svc.yaml
+kubectl apply -f config/ueransim-gnb01-config.yaml
+kubectl apply -f config/ueransim-gnb01-deploy.yaml
+kubectl apply -f config/ueransim-gnb01-svc.yaml
 ```
 
 ### Logs úteis
