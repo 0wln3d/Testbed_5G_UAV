@@ -482,9 +482,8 @@ docker system prune -af
 Se você estiver usando os scripts em `scripts/`, a ideia é:
 
 ```bash
-./scripts/start-testbed.sh
-./scripts/stop-testbed.sh
-./scripts/reset-testbed.sh
+./scripts/Iniciar-Testbed.sh
+./scripts/Parar-Testbed.sh
 ```
 
 > Ajuste as permissões caso necessário:
