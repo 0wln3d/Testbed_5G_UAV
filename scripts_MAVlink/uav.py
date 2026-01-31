@@ -8,9 +8,9 @@ import time
 import math
 # math: usado para trigonometria e distância (hypot, cos, radians).
 
-import socket
-# socket: aqui também não é usado diretamente.
-# Pode ser resquício; pode remover sem mudar o comportamento (desde que nada mais use).
+import os
+os.environ['MAVLINK20'] = '1' 
+# Utilizado para forçar a utilização do MAVlink 2.0 - comentar as duas linhas acima caso queira usar o 1.0
 
 from pymavlink import mavutil
 # pymavlink: MAVLink via Python. mavutil fornece conexões UDP e constantes MAVLink.
@@ -90,7 +90,7 @@ flying = False
 # flying: está em voo? (True após takeoff aceito)
 
 mode = 'STANDBY'
-# modo “lógico” da simulação (não é MAVLink real, é sua FSM simplificada).
+# modo “lógico” da simulação (não é MAVLink real, é uma FSM simplificada).
 
 target_alt_m = 0.0
 # altitude alvo que o controlador/RTL quer atingir.
@@ -161,7 +161,7 @@ def log(s):
 
 def send_statustext(tx, text, severity=mavutil.mavlink.MAV_SEVERITY_INFO):
     # Envia STATUSTEXT para o GCS.
-    # MAVLink STATUSTEXT tem tamanho limitado; você corta em 50 bytes.
+    # MAVLink STATUSTEXT tem tamanho limitado; corta em 50 bytes.
     tx.mav.statustext_send(severity, text.encode('utf-8')[:50])
 
 def send_ack(tx, command, result):
@@ -195,7 +195,7 @@ def start_rtl(tx):
     failsafe_active = True
     rtl_active = True
     mode = 'RTL'
-    # Marca que entrou em modo RTL (na sua simulação).
+    # Marca que entrou em modo RTL (simulação).
 
     if not flying:
         # Se não está voando, não faz sentido executar RTL (não tem o que retornar).
@@ -269,7 +269,7 @@ def exit_failsafe_link_restored(tx):
     link_up = True
     # Link voltou.
 
-    # Realista: link voltar não cancela RTL automaticamente (você escolheu esse comportamento).
+    # Realista: link voltar não cancela RTL automaticamente (opcional).
     failsafe_active = False
 
     send_statustext(tx, 'GCS HEARTBEAT RESTORED', mavutil.mavlink.MAV_SEVERITY_INFO)
@@ -509,10 +509,10 @@ try:
             if t == 'SET_MODE':
                 cm = int(d.get('custom_mode', 0))
 
-                # Mapeamento simplificado de modos (como no seu GCS):
+                # Mapeamento simplificado de modos (como no GCS):
                 if cm == 4:
                     mode = 'GUIDED'
-                    # Ao entrar em GUIDED, você cancela RTL.
+                    # Ao entrar em GUIDED, cancela RTL.
                     rtl_active = False
                     rtl_phase = 'IDLE'
 

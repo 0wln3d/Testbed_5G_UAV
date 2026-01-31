@@ -10,12 +10,12 @@ import threading
 # - receber telemetria (rx_worker)
 # - enviar heartbeats periódicos (hb_worker)
 
-import socket
-# socket: (neste código não está sendo usado diretamente).
-# Pode ser resquício de versões anteriores. Não atrapalha, mas poderia ser removido.
-
 from collections import deque
 # deque: fila eficiente para armazenar eventos recebidos (ACK e STATUSTEXT) e imprimir em lote.
+
+import os
+os.environ['MAVLINK20'] = '1' 
+# Utilizado para forçar a utilização do MAVlink 2.0 - comentar as 2 linhas cima caso queira usar o 1.0.
 
 from pymavlink import mavutil
 # pymavlink: biblioteca que implementa MAVLink.
@@ -27,14 +27,14 @@ from pymavlink import mavutil
 # =========================
 
 DRONE_IP = '<IP_UAV>'
-# IP do UAV (drone). No seu testbed, isso costuma ser o IP dentro do túnel (ex: uesimtun0).
+# IP do UAV (drone). No testbed, isso costuma ser o IP dentro do túnel (ex: uesimtun0).
 
 DRONE_LISTEN_PORT = 14550
-# Porta em que o UAV (drone) está "ouvindo" para receber comandos MAVLink (udpout do GCS vai pra cá).
+# Porta em que o UAV (drone) está "ouvindo" para receber comandos MAVLink.
 
 CTRL_LISTEN_PORT  = 14551
 # Porta em que o GCS vai "ouvir" as mensagens que chegam do drone (telemetria).
-# O drone manda telemetria para o IP do GCS nessa porta (ou algo equivalente, dependendo do lado UAV).
+# O drone manda telemetria para o IP do GCS nessa porta.
 
 
 # =========================
@@ -131,7 +131,7 @@ link_up = True
 
 stopped = False
 # stopped indica se a transmissão (TX) foi parada devido a perda de link.
-# Você setou stopped=True quando considera o link perdido (timeout).
+# stopped=True quando considera o link perdido (timeout).
 
 running = True
 # running controla o loop das threads rx_worker e hb_worker.
@@ -290,10 +290,10 @@ def send_setpos(north_m: float, east_m: float, alt_m: float):
     z_down = -float(alt_m)
     # No frame LOCAL_NED:
     # - eixo Z é "Down" (para baixo positivo).
-    # Então para subir alt_m, usamos z_down negativo.
+    # Então para subir alt_m, z_down negativo.
 
     tx.mav.set_position_target_local_ned_send(
-        int(time.time() * 1000) & 0xFFFFFFFF,  # time_boot_ms (aqui você usa timestamp atual em ms "mascarado" em 32 bits)
+        int(time.time() * 1000) & 0xFFFFFFFF,  # time_boot_ms (aqui se usa timestamp atual em ms "mascarado" em 32 bits)
         1, 0,                                  # target_system=1, target_component=0
         mavutil.mavlink.MAV_FRAME_LOCAL_NED,    # frame de referência
         0b0000111111000111,                    # type_mask: bits definem quais campos são ignorados
@@ -368,7 +368,7 @@ def hb_worker():
     global running
 
     while running:
-        # heartbeat continua existindo mesmo se você não digitar nada
+        # heartbeat continua existindo mesmo se não digitar nada
         with lock:
             ok = (not stopped) and link_up
             # Só envia heartbeat se o link não foi marcado como perdido.
@@ -406,7 +406,7 @@ for i in range(3):
     hb_send_once()
     print(f'[GCS] heartbeat inicial {i+1}', flush=True)
     time.sleep(0.5)
-# Você manda 3 heartbeats no começo apenas para sinalizar "vida" no terminal.
+# 3 heartbeats no começo apenas para sinalizar "vida" no terminal.
 # Não é obrigatório (o hb_worker já faz isso), mas ajuda visualmente.
 
 
@@ -459,7 +459,7 @@ try:
                 link_up = False
                 stopped = True
                 # Marca o link como perdido e para transmissões.
-                # Observação: aqui você NÃO implementa reconexão automática.
+                # Observação: aqui NÃO implementa reconexão automática.
 
         # ---------------------------------------------------------
         # 2) Detecta queda para imprimir aviso
@@ -468,9 +468,7 @@ try:
             became_down = stopped and (not link_up)
 
         if became_down:
-            # Aqui você imprime um aviso "de queda".
-            # Do jeito que está, isso pode ser impresso várias vezes a cada loop.
-            # (pois became_down continuará True depois que caiu)
+            # Aqui imprime um aviso "de queda".
             print('\n[GCS] CONEXÃO PERDIDA (>=30s sem telemetria). Parando TX (sem reconectar).', flush=True)
 
         # ---------------------------------------------------------
