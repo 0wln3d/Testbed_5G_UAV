@@ -775,7 +775,7 @@ Por padrão no testbed o Signing não está no UAV e GCS. Caso opte pela ativaç
 #### Código para adicionar no uav.py:
 ```bash
 import os
-os.environ['MAVLINK20'] = '1' # Obrigatório ser a primeira coisa
+os.environ['MAVLINK20'] = '1' #
 import time
 from pymavlink import mavutil
 
