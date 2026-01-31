@@ -762,10 +762,77 @@ Eles geram e fazem download dos arquivos de configuração de forma automática,
 
 ### Utilização do Protocolo MAVlink 1.0 
 
-Por padrão os scripts estão utilizando o MAVlink 2.0. Caso opte pela versão 1.0, deve-se editar os arquivos "/tmp/uav.py" e "/tmp/gcs.py" dentro dos seus respectivos PODs e comentar as seguintes linhas:
+Por padrão os scripts estão utilizando o MAVlink 2.0. Caso opte pela versão 1.0, deve-se editar os arquivos "/tmp/uav.py" e "/tmp/gcs.py" dentro dos seus respectivos Pods e comentar as seguintes linhas:
 ```bash
 import os
 os.environ['MAVLINK20'] = '1'
 ```
+
+### Utilização de Signing no MAVlink 2.0
+
+Por padrão no testbed o Signing não está no UAV e GCS. Caso opte pela ativação, deve-se editar os arquivos "/tmp/uav.py" e "/tmp/gcs.py" dentro dos seus respectivos Pods e incluir as seguintes linhas:
+
+#### Código para adicionar no uav.py:
+```bash
+import os
+os.environ['MAVLINK20'] = '1' # Obrigatório ser a primeira coisa
+import time
+from pymavlink import mavutil
+
+# --- COLE ISTO LOGO APÓS CRIAR 'rx' e 'tx' ---
+# Chave secreta (deve ser idêntica no GCS)
+MY_SECRET_KEY = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+key_bytes = bytearray.fromhex(MY_SECRET_KEY)
+
+# RX: valida o que chega (comandos do GCS)
+rx.setup_signing(
+    key_bytes,
+    sign_outgoing=False,
+    allow_unsigned_callback=None,
+    initial_timestamp=None
+)
+
+# TX: assina o que sai (telemetria/heartbeat)
+tx.setup_signing(
+    key_bytes,
+    sign_outgoing=True,
+    allow_unsigned_callback=None,
+    initial_timestamp=None
+)
+
+print("[UAV] MAVLink2 Signing ATIVO: RX valida, TX assina.")
+```
+
+#### Código para o gcs.py:
+```bash
+# --- COLE ISTO NO TOPO DO ARQUIVO ---
+import os
+os.environ['MAVLINK20'] = '1'
+import time
+from pymavlink import mavutil
+
+# --- COLE ISTO LOGO APÓS CRIAR 'rx' e 'tx' ---
+MY_SECRET_KEY = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+key_bytes = bytearray.fromhex(MY_SECRET_KEY)
+
+
+# TX: assina comandos
+tx.setup_signing(
+    key_bytes,
+    sign_outgoing=True,
+    allow_unsigned_callback=None,
+    initial_timestamp=None
+)
+
+# RX: valida telemetria
+rx.setup_signing(
+    key_bytes,
+    sign_outgoing=False,
+    allow_unsigned_callback=None,
+    initial_timestamp=None
+)
+
+print("[GCS] MAVLink2 Signing ATIVO: TX assina, RX valida.")
+``` 
 
 ---
