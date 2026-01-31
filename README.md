@@ -240,7 +240,7 @@ O ambiente foi pensado para **experimentos acadêmicos**, **pesquisa em ciberseg
 │   └── gcs.py                  # Simulador do GCS
 │
 ├── config/
-│   ├── ngc-values.yaml                   # Valores base do Open5GS
+│   ├── ngc-values.yaml                   # Valores base do Open5GS (alterar de acordo com o cenário desejado)
 │   ├── open5gs-override.yaml             # UPF como root (possibilita tcpdump)
 │   ├── ueransim-gnb01-config.yaml
 │   ├── ueransim-gnb01-deploy.yaml
@@ -421,7 +421,7 @@ kubectl logs -n open5gs $(kubectl get pods -n open5gs -o name | grep amf | head 
 ## 04 – Deploy do UERANSIM gNB (GNB01)
 
 Arquivos:
-- `config/ueransim-gnb01-deploy.yaml` (ConfigMap)
+- `config/ueransim-gnb01-config.yaml` (ConfigMap)
 - `config/ueransim-gnb01-deploy.yaml` (Deployment)
 - `config/ueransim-gnb01-svc.yaml` (Service headless)
 
@@ -775,7 +775,7 @@ Por padrão no testbed o Signing não está no UAV e GCS. Caso opte pela ativaç
 #### Código para adicionar no uav.py:
 ```bash
 import os
-os.environ['MAVLINK20'] = '1' #
+os.environ['MAVLINK20'] = '1'
 import time
 from pymavlink import mavutil
 
